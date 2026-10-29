@@ -27,18 +27,18 @@ export const withdraw = async (
   amount: BN,
   recipientTokens: PublicKey,
   signer: Keypair = env.oracle,
-  allowlist: PublicKey = env.allowlist,
   instructions: PublicKey = SYSVAR_INSTRUCTIONS_PUBKEY,
+  messageOverride?: Buffer,
 ) => {
   const signatureCheck = Ed25519Program.createInstructionWithPrivateKey({
     privateKey: signer.secretKey,
-    message: withdrawalMessage(env.vault, recipientTokens, amount),
+    message:
+      messageOverride ?? withdrawalMessage(env.vault, recipientTokens, amount),
   });
   const ix = await env.program.methods
     .withdraw(amount)
     .accountsPartial({
       caller: env.payer.publicKey,
-      allowlist,
       mint: env.mint,
       recipientTokens,
       instructions,

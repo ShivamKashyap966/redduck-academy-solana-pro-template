@@ -12,8 +12,12 @@ pub enum VaultError {
     MalformedSysvar,
     #[msg("The Ed25519 instruction has an unexpected layout")]
     MalformedEd25519,
-    #[msg("The signer is not in the allowlist")]
+    #[msg("The signer is not in the config")]
     KeyNotAllowed,
     #[msg("The signed message does not match this withdrawal")]
     MessageMismatch,
+    #[msg("The instructions account is not the real instructions sysvar")]
+    WrongInstructionsSysvar,
+    #[msg("At least one oracle key is required")]
+    NoOracles,
 }

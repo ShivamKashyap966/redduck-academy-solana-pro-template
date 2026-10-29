@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::Config;
+use crate::{Config, VaultError, MAX_KEYS};
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -23,10 +23,15 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+/// The admin writes the oracle keys into the config PDA once; from then on
+/// `withdraw` only ever believes this account, never one the caller brought.
+pub fn initialize(ctx: Context<Initialize>, oracles: Vec<Pubkey>) -> Result<()> {
+    require!(!oracles.is_empty(), VaultError::NoOracles);
+    require!(oracles.len() <= MAX_KEYS, VaultError::TooManyKeys);
     ctx.accounts.config.set_inner(Config {
         admin: ctx.accounts.admin.key(),
         mint: ctx.accounts.mint.key(),
+        oracles,
         bump: ctx.bumps.config,
     });
     Ok(())

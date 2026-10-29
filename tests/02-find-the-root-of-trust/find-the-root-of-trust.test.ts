@@ -1,9 +1,33 @@
 import { assert } from "chai";
 import { Ed25519Program, Keypair, PublicKey } from "@solana/web3.js";
 
-import { oneToken, sendIxs, tokenBalance } from "../helpers";
+import { oneToken, tokenBalance } from "../helpers";
 import { VaultFixture, setupVault } from "./fixture";
-import { fakeInstructionsSysvar, withdraw, withdrawalMessage } from "./actions";
+import {
+  fakeInstructionsSysvar,
+  withdraw,
+  withdrawalMessage,
+} from "./actions";
+
+const amount = () => oneToken().muln(100);
+
+const catchError = async (
+  promise: Promise<unknown>,
+  expectedCode: string,
+): Promise<void> => {
+  let err: Error | null = null;
+  try {
+    await promise;
+  } catch (e) {
+    err = e as Error;
+  }
+  assert.isNotNull(err, "withdraw must fail");
+  assert.include(
+    err!.toString(),
+    expectedCode,
+    "withdraw must fail at the expected check",
+  );
+};
 
 describe("02-find-the-root-of-trust", () => {
   let env: VaultFixture;
@@ -14,43 +38,37 @@ describe("02-find-the-root-of-trust", () => {
 
   it("pays out a withdrawal the oracle signed", async () => {
     const before = await tokenBalance(env.context, env.payerTokens);
-    await withdraw(env, oneToken().muln(100), env.payerTokens);
+    await withdraw(env, amount(), env.payerTokens);
     const after = await tokenBalance(env.context, env.payerTokens);
 
-    assert.equal((after - before).toString(), oneToken().muln(100).toString());
+    assert.equal((after - before).toString(), amount().toString());
     assert.equal(
       (await tokenBalance(env.context, env.vault)).toString(),
       oneToken().muln(900).toString(),
     );
   });
 
-  it("drains the vault using a caller-created instructions account and allowlist", async () => {
-    const amount = oneToken().muln(100);
+  it("rejects an exploit with a caller-created instructions sysvar account", async () => {
+    // The exploit test from the vulnerable version: an attacker signs their own
+    // message and places it in an account imitating the sysvar.
     const attacker = Keypair.generate();
-    const fakeAllowlist = Keypair.generate();
-    const fakeSysvar = Keypair.generate();
-
-    // 1. Attacker creates an allowlist with their own key
-    const allowlistIx = await env.program.methods
-      .createAllowlist([attacker.publicKey])
-      .accountsPartial({
-        authority: env.payer.publicKey,
-        allowlist: fakeAllowlist.publicKey,
-      })
-      .instruction();
-    await sendIxs(env.context, [env.payer, fakeAllowlist], allowlistIx);
-
-    // 2. Build Ed25519 instruction signed by attacker's oracle
-    const signatureCheck = Ed25519Program.createInstructionWithPrivateKey({
-      privateKey: attacker.secretKey,
-      message: withdrawalMessage(env.vault, env.payerTokens, amount),
+    env.context.setAccount(attacker.publicKey, {
+      lamports: 10_000_000_000,
+      data: Buffer.alloc(0),
+      owner: PublicKey.default,
+      executable: false,
+      rentEpoch: 0,
     });
 
-    // 3. Store fake sysvar data in an ordinary account
+    const fakeCheck = Ed25519Program.createInstructionWithPrivateKey({
+      privateKey: attacker.secretKey,
+      message: withdrawalMessage(env.vault, env.payerTokens, amount()),
+    });
+    const fakeSysvar = Keypair.generate();
     env.context.setAccount(fakeSysvar.publicKey, {
       lamports: 1_000_000,
-      data: fakeInstructionsSysvar(signatureCheck),
-      owner: PublicKey.default,
+      data: fakeInstructionsSysvar(fakeCheck),
+      owner: new PublicKey("Sysvar1111111111111111111111111111111111111"),
       executable: false,
       rentEpoch: 0,
     });
@@ -58,21 +76,93 @@ describe("02-find-the-root-of-trust", () => {
     const before = await tokenBalance(env.context, env.payerTokens);
     const vaultBefore = await tokenBalance(env.context, env.vault);
 
-    // 4. Withdraw using the fake allowlist and fake sysvar account
-    await withdraw(
-      env,
-      amount,
-      env.payerTokens,
-      attacker,
-      fakeAllowlist.publicKey,
-      fakeSysvar.publicKey,
+    // Against the fixed program, this must be rejected at the sysvar check
+    await catchError(
+      withdraw(env, amount(), env.payerTokens, attacker, fakeSysvar.publicKey),
+      "0x1777", // WrongInstructionsSysvar
     );
 
-    const after = await tokenBalance(env.context, env.payerTokens);
-    const vaultAfter = await tokenBalance(env.context, env.vault);
+    assert.equal(
+      (await tokenBalance(env.context, env.vault)).toString(),
+      vaultBefore.toString(),
+      "vault must remain untouched",
+    );
+    assert.equal(
+      (await tokenBalance(env.context, env.payerTokens)).toString(),
+      before.toString(),
+      "recipient balance must remain untouched",
+    );
+  });
 
-    // Against the unfixed program, the exploit succeeds:
-    assert.equal((after - before).toString(), amount.toString());
-    assert.equal((vaultBefore - vaultAfter).toString(), amount.toString());
+  it("rejects an instructions account that is not the real sysvar", async () => {
+    // The oracle's signature is valid and the message matches: the only wrong
+    // thing is that the sysvar-shaped data sits in an account of someone else.
+    const fakeCheck = Ed25519Program.createInstructionWithPrivateKey({
+      privateKey: env.oracle.secretKey,
+      message: withdrawalMessage(env.vault, env.payerTokens, amount()),
+    });
+    const fakeSysvar = Keypair.generate();
+    env.context.setAccount(fakeSysvar.publicKey, {
+      lamports: 1_000_000,
+      data: fakeInstructionsSysvar(fakeCheck),
+      owner: new PublicKey("Sysvar1111111111111111111111111111111111111"),
+      executable: false,
+      rentEpoch: 0,
+    });
+
+    const vaultBefore = await tokenBalance(env.context, env.vault);
+    await catchError(
+      withdraw(env, amount(), env.payerTokens, env.oracle, fakeSysvar.publicKey),
+      "0x1777", // WrongInstructionsSysvar
+    );
+
+    assert.equal(
+      (await tokenBalance(env.context, env.vault)).toString(),
+      vaultBefore.toString(),
+    );
+  });
+
+  it("rejects a signer that is not in the config", async () => {
+    // Real sysvar, real signature, correct message — but the key is not one
+    // the config holds.
+    const intruder = Keypair.generate();
+    env.context.setAccount(intruder.publicKey, {
+      lamports: 10_000_000_000,
+      data: Buffer.alloc(0),
+      owner: PublicKey.default,
+      executable: false,
+      rentEpoch: 0,
+    });
+
+    const vaultBefore = await tokenBalance(env.context, env.vault);
+    await catchError(
+      withdraw(env, amount(), env.payerTokens, intruder),
+      "0x1775", // KeyNotAllowed
+    );
+
+    assert.equal(
+      (await tokenBalance(env.context, env.vault)).toString(),
+      vaultBefore.toString(),
+    );
+  });
+
+  it("rejects a message that does not match the withdrawal", async () => {
+    // The oracle signs over 200 tokens while the instruction withdraws 100.
+    const wrongMessage = withdrawalMessage(
+      env.vault,
+      env.payerTokens,
+      oneToken().muln(200),
+    );
+
+    const vaultBefore = await tokenBalance(env.context, env.vault);
+    await catchError(
+      withdraw(env, amount(), env.payerTokens, env.oracle, undefined, wrongMessage),
+      "0x1776", // MessageMismatch
+    );
+
+    assert.equal(
+      (await tokenBalance(env.context, env.vault)).toString(),
+      vaultBefore.toString(),
+    );
   });
 });
