@@ -1,8 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{transfer_checked, Mint, Token, TokenAccount, TransferChecked};
 
-use crate::{state::staker::PRECISION, Pool, PoolError};
+use crate::{Pool, PoolError, PRECISION};
 
+/// A reward arrives and moves the pool's reward-per-token accumulator.
+/// No staker account is touched; any remaining accounts passed are ignored.
 #[derive(Accounts)]
 pub struct AddRewards<'info> {
     pub funder: Signer<'info>,
@@ -24,9 +26,6 @@ pub fn add_rewards<'info>(
     let pool = &mut ctx.accounts.pool;
     let total_staked = pool.total_staked;
     require!(total_staked > 0, PoolError::NothingStaked);
-    if amount == 0 {
-        return Ok(());
-    }
 
     transfer_checked(
         CpiContext::new(
@@ -42,17 +41,16 @@ pub fn add_rewards<'info>(
         ctx.accounts.mint.decimals,
     )?;
 
-    // Calculate reward delta per staked token with high fixed-point precision (1e18)
-    let reward_delta = (amount as u128)
+    // Raise the reward per staked token without touching any staker account
+    let addition = (amount as u128)
         .checked_mul(PRECISION)
         .ok_or(PoolError::MathOverflow)?
-        / (total_staked as u128);
+        / total_staked as u128;
 
     pool.reward_per_token = pool
         .reward_per_token
-        .checked_add(reward_delta)
+        .checked_add(addition)
         .ok_or(PoolError::MathOverflow)?;
 
-    // No staker loop: remaining accounts passed by caller are completely ignored
     Ok(())
 }

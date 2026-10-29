@@ -23,8 +23,8 @@ pub fn claim(ctx: Context<Claim>) -> Result<()> {
     let pool = &ctx.accounts.pool;
     let staker = &mut ctx.accounts.staker;
 
-    // Settle newly accumulated rewards into pending and update marker
-    staker.settle(pool.reward_per_token)?;
+    // Settle accumulated rewards up to the current pool reward_per_token
+    pool.settle(staker)?;
 
     let amount = staker.pending;
     staker.pending = 0;

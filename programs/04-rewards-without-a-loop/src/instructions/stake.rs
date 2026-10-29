@@ -28,6 +28,15 @@ pub struct Stake<'info> {
 }
 
 pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
+    let pool = &mut ctx.accounts.pool;
+    let staker = &mut ctx.accounts.staker;
+
+    staker.owner = ctx.accounts.owner.key();
+    staker.bump = ctx.bumps.staker;
+
+    // Settle what the staker is owed before the stake changes, never after
+    pool.settle(staker)?;
+
     transfer_checked(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
@@ -42,18 +51,11 @@ pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
         ctx.accounts.mint.decimals,
     )?;
 
-    let pool = &mut ctx.accounts.pool;
-    let staker = &mut ctx.accounts.staker;
-    staker.owner = ctx.accounts.owner.key();
-    staker.bump = ctx.bumps.staker;
-
-    // Settle what the staker is owed before the stake changes
-    staker.settle(pool.reward_per_token)?;
-
     staker.stake = staker
         .stake
         .checked_add(amount)
         .ok_or(PoolError::MathOverflow)?;
+
     pool.total_staked = pool
         .total_staked
         .checked_add(amount)

@@ -25,13 +25,14 @@ pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Result<()> {
 
     require!(staker.stake >= amount, PoolError::InsufficientStake);
 
-    // Settle what the staker is owed before the stake changes
-    staker.settle(pool.reward_per_token)?;
+    // Settle what the staker is owed before the stake changes, never after
+    pool.settle(staker)?;
 
     staker.stake = staker
         .stake
         .checked_sub(amount)
         .ok_or(PoolError::MathOverflow)?;
+
     pool.total_staked = pool
         .total_staked
         .checked_sub(amount)

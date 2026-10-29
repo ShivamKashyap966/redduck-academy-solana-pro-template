@@ -24,18 +24,36 @@ jobs:
           anchor --version
       - name: Install dependencies
         run: npm ci
-      - name: Build lazy_pool and run task 04 tests
+      - name: Run task 02 tests
         run: |
           mkdir -p "$HOME/.cache/solana"
-          anchor build -p lazy_pool -- -v
-          ls -la target/deploy
-          ls -la target/idl
-          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/04-rewards-without-a-loop/*.test.ts
-      - name: Build operator_free and run task 03 tests
+          anchor build -p oracle_vault -- -v
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/02-find-the-root-of-trust/*.test.ts
+      - name: Run task 03 tests
         run: |
           anchor build -p operator_free -- -v
           npx ts-mocha -p ./tsconfig.json -t 1000000 tests/03-run-it-without-the-operator/*.test.ts
-      - name: Build oracle_vault and run task 02 tests
+      - name: Run task 04 tests
         run: |
-          anchor build -p oracle_vault -- -v
-          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/02-find-the-root-of-trust/*.test.ts
+          anchor build -p lazy_pool -- -v
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/04-rewards-without-a-loop/*.test.ts
+      - name: Run task 05 tests
+        run: |
+          anchor build -p local_book -- -v
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/05-orderbook-with-local-checks/*.test.ts
+      - name: Run task 06 tests
+        run: |
+          anchor build -p open_multisig -- -v
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/06-proposal-anyone-can-execute/*.test.ts
+      - name: Run task 07 tests
+        run: |
+          anchor build -p total_claims -- -v
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/07-claims-in-any-order/*.test.ts
+      - name: Run task 08 tests
+        run: |
+          anchor build -p position_value -- -v
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/08-value-the-position/*.test.ts
+      - name: Run task 09 tests
+        run: |
+          anchor build -p round_exit -- -v
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/09-write-the-exit/*.test.ts
