@@ -30,6 +30,13 @@ The caller's fee is designed to incentivize third-party crank bots to execute cl
   6. It checks freshness against the cluster clock: `now >= publish_time - 5 && now - publish_time <= config.max_price_age`.
 - **When the update is too old:** If the timestamp is older than `config.max_price_age`, the transaction immediately reverts with `RewardsError::StalePrice`. The stale price is rejected, ensuring users and buyers can only trade on fresh, authentic data.
 
+## Elimination of operator paths
+
+All operator paths have been completely eliminated from the protocol:
+1. **Old admin payout path (`pay_reward`):** Completely removed. Payouts no longer require an admin server or private key. Any user or third-party crank can invoke `claim` permissionlessly.
+2. **Old team bot pricing path (`set_price`):** The old permissioned `set_price` instruction requiring a `bot` signature was eliminated. The `bot` key stored in `Config` has zero privileges and cannot set prices. `set_price` is now a permissionless pull instruction requiring an Ed25519 signature from `config.oracle` passed in the same transaction.
+3. **No operator remains:** Zero off-chain team servers or bots are required for users to receive rewards or trade against the vault.
+
 ## What stays with the admin
 
 Only two administrative actions retain admin-signer requirements:
