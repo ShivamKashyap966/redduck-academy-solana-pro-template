@@ -65,7 +65,7 @@ to the cluster before anything else is trusted:
   belongs to this transaction, verified by the runtime's Ed25519 precompile.
 - **The Ed25519 key is compared with the config**: the parsed signing key
   must be in `config.oracles` (`KeyNotAllowed`), never in anything the caller
-  brought. The allowlist account and `create_allowlist` are gone.
+  brought. Caller-created allowlists are never used to authorize withdrawals.
 - **The message is compared with the withdrawal**: `withdrawal_message` is
   built from `vault` (the config-seeded PDA), `recipient_tokens` (constrained
   to `config.mint`) and `amount` (the argument being executed), so a valid
@@ -96,5 +96,5 @@ the address comparison.
   PDA that `deposit` and `initialize` use.
 
 There is exactly one config, one place that writes it, and every instruction
-resolves it from the same seeds — the permissionless second root
-(`create_allowlist` + `state/allowlist.rs`) was deleted.
+resolves it from the same seeds — caller-created allowlists (`create_allowlist` +
+`state/allowlist.rs`) can never authorize withdrawals.

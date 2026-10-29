@@ -1,7 +1,12 @@
 import { assert } from "chai";
-import { Ed25519Program, Keypair, PublicKey } from "@solana/web3.js";
+import {
+  Ed25519Program,
+  Keypair,
+  PublicKey,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+} from "@solana/web3.js";
 
-import { oneToken, tokenBalance } from "../helpers";
+import { oneToken, sendIxs, tokenBalance } from "../helpers";
 import { VaultFixture, setupVault } from "./fixture";
 import {
   fakeInstructionsSysvar,
@@ -48,9 +53,9 @@ describe("02-find-the-root-of-trust", () => {
     );
   });
 
-  it("rejects an exploit with a caller-created instructions sysvar account", async () => {
-    // The exploit test from the vulnerable version: an attacker signs their own
-    // message and places it in an account imitating the sysvar.
+  it("rejects an exploit with a caller-created instructions sysvar account and allowlist", async () => {
+    // The exploit test from the vulnerable version: an attacker creates an allowlist,
+    // signs their own message, and places it in an account imitating the sysvar.
     const attacker = Keypair.generate();
     env.context.setAccount(attacker.publicKey, {
       lamports: 10_000_000_000,
@@ -59,6 +64,16 @@ describe("02-find-the-root-of-trust", () => {
       executable: false,
       rentEpoch: 0,
     });
+
+    const fakeAllowlist = Keypair.generate();
+    const allowlistIx = await env.program.methods
+      .createAllowlist([attacker.publicKey])
+      .accountsPartial({
+        authority: env.payer.publicKey,
+        allowlist: fakeAllowlist.publicKey,
+      })
+      .instruction();
+    await sendIxs(env.context, [env.payer, fakeAllowlist], allowlistIx);
 
     const fakeCheck = Ed25519Program.createInstructionWithPrivateKey({
       privateKey: attacker.secretKey,
@@ -78,7 +93,14 @@ describe("02-find-the-root-of-trust", () => {
 
     // Against the fixed program, this must be rejected at the sysvar check
     await catchError(
-      withdraw(env, amount(), env.payerTokens, attacker, fakeSysvar.publicKey),
+      withdraw(
+        env,
+        amount(),
+        env.payerTokens,
+        attacker,
+        fakeAllowlist.publicKey,
+        fakeSysvar.publicKey,
+      ),
       "0x1777", // WrongInstructionsSysvar
     );
 
@@ -112,7 +134,14 @@ describe("02-find-the-root-of-trust", () => {
 
     const vaultBefore = await tokenBalance(env.context, env.vault);
     await catchError(
-      withdraw(env, amount(), env.payerTokens, env.oracle, fakeSysvar.publicKey),
+      withdraw(
+        env,
+        amount(),
+        env.payerTokens,
+        env.oracle,
+        env.allowlist,
+        fakeSysvar.publicKey,
+      ),
       "0x1777", // WrongInstructionsSysvar
     );
 
@@ -156,7 +185,15 @@ describe("02-find-the-root-of-trust", () => {
 
     const vaultBefore = await tokenBalance(env.context, env.vault);
     await catchError(
-      withdraw(env, amount(), env.payerTokens, env.oracle, undefined, wrongMessage),
+      withdraw(
+        env,
+        amount(),
+        env.payerTokens,
+        env.oracle,
+        env.allowlist,
+        SYSVAR_INSTRUCTIONS_PUBKEY,
+        wrongMessage,
+      ),
       "0x1776", // MessageMismatch
     );
 
