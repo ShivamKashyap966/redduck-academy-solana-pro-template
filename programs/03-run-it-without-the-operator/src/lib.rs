@@ -29,12 +29,12 @@ pub mod operator_free {
         instructions::accrue(ctx, amount)
     }
 
-    pub fn pay_reward(ctx: Context<PayReward>) -> Result<()> {
-        instructions::pay_reward(ctx)
+    pub fn claim(ctx: Context<Claim>) -> Result<()> {
+        instructions::claim(ctx)
     }
 
-    pub fn set_price(ctx: Context<SetPrice>, price: u64) -> Result<()> {
-        instructions::set_price(ctx, price)
+    pub fn set_price(ctx: Context<SetPrice>) -> Result<()> {
+        instructions::set_price(ctx)
     }
 
     pub fn buy(ctx: Context<Buy>, lamports: u64) -> Result<()> {

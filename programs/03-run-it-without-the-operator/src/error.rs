@@ -12,4 +12,6 @@ pub enum RewardsError {
     NotEd25519,
     #[msg("The Ed25519 instruction has an unexpected layout")]
     MalformedEd25519,
+    #[msg("Unauthorized oracle")]
+    UnauthorizedOracle,
 }

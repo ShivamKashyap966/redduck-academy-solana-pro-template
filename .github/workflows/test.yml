@@ -1,0 +1,37 @@
+name: Test
+
+on: [push, workflow_dispatch]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Solana CLI (Agave v2.1.0)
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v2.1.0/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+      - name: Install Anchor CLI 0.31.1
+        run: |
+          sudo curl -sSfL -o /usr/local/bin/anchor https://github.com/coral-xyz/anchor/releases/download/v0.31.1/anchor-0.31.1-x86_64-unknown-linux-gnu
+          sudo chmod +x /usr/local/bin/anchor
+          anchor --version
+      - name: Install dependencies
+        run: npm ci
+      - name: Build operator_free and run task 03 tests
+        run: |
+          mkdir -p "$HOME/.cache/solana"
+          anchor build -p operator_free -- -v
+          ls -la target/deploy
+          ls -la target/idl
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/03-run-it-without-the-operator/*.test.ts
+      - name: Build oracle_vault and run task 02 tests
+        run: |
+          anchor build -p oracle_vault -- -v
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/02-find-the-root-of-trust/*.test.ts
