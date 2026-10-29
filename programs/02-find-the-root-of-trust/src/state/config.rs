@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use super::allowlist::MAX_KEYS;
+pub const MAX_KEYS: usize = 4;
 
 /// The root of trust: a PDA only `initialize` can write, carrying the keys
 /// allowed to sign a withdrawal. Everything the program believes about an

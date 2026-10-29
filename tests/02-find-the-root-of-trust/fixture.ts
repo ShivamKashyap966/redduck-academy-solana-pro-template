@@ -22,7 +22,7 @@ export interface VaultFixture {
   vault: PublicKey;
   mint: PublicKey;
   payerTokens: PublicKey;
-  allowlist: PublicKey;
+  allowlist?: PublicKey;
 }
 
 export const setupVault = async (): Promise<VaultFixture> => {
@@ -51,17 +51,6 @@ export const setupVault = async (): Promise<VaultFixture> => {
     .instruction();
   await sendIxs(context, [payer], initIx);
 
-  // Preserve create_allowlist interface from template:
-  const allowlistKeypair = Keypair.generate();
-  const allowlistIx = await program.methods
-    .createAllowlist([oracle.publicKey])
-    .accountsPartial({
-      authority: payer.publicKey,
-      allowlist: allowlistKeypair.publicKey,
-    })
-    .instruction();
-  await sendIxs(context, [payer, allowlistKeypair], allowlistIx);
-
   const depositIx = await program.methods
     .deposit(oneToken().muln(1_000))
     .accountsPartial({
@@ -82,6 +71,6 @@ export const setupVault = async (): Promise<VaultFixture> => {
     vault,
     mint,
     payerTokens,
-    allowlist: allowlistKeypair.publicKey,
+    allowlist: Keypair.generate().publicKey,
   };
 };

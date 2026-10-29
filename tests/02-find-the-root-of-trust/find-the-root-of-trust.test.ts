@@ -6,7 +6,7 @@ import {
   SYSVAR_INSTRUCTIONS_PUBKEY,
 } from "@solana/web3.js";
 
-import { oneToken, sendIxs, tokenBalance } from "../helpers";
+import { oneToken, tokenBalance } from "../helpers";
 import { VaultFixture, setupVault } from "./fixture";
 import {
   fakeInstructionsSysvar,
@@ -53,9 +53,9 @@ describe("02-find-the-root-of-trust", () => {
     );
   });
 
-  it("rejects an exploit with a caller-created instructions sysvar account and allowlist", async () => {
-    // The exploit test from the vulnerable version: an attacker creates an allowlist,
-    // signs their own message, and places it in an account imitating the sysvar.
+  it("rejects an exploit with a caller-created instructions sysvar account", async () => {
+    // The exploit test from the vulnerable version: an attacker signs their own
+    // message and places it in an account imitating the sysvar.
     const attacker = Keypair.generate();
     env.context.setAccount(attacker.publicKey, {
       lamports: 10_000_000_000,
@@ -66,15 +66,6 @@ describe("02-find-the-root-of-trust", () => {
     });
 
     const fakeAllowlist = Keypair.generate();
-    const allowlistIx = await env.program.methods
-      .createAllowlist([attacker.publicKey])
-      .accountsPartial({
-        authority: env.payer.publicKey,
-        allowlist: fakeAllowlist.publicKey,
-      })
-      .instruction();
-    await sendIxs(env.context, [env.payer, fakeAllowlist], allowlistIx);
-
     const fakeCheck = Ed25519Program.createInstructionWithPrivateKey({
       privateKey: attacker.secretKey,
       message: withdrawalMessage(env.vault, env.payerTokens, amount()),
@@ -163,41 +154,7 @@ describe("02-find-the-root-of-trust", () => {
       rentEpoch: 0,
     });
 
-    const vaultBefore = await tokenBalance(env.context, env.vault);
-    await catchError(
-      withdraw(env, amount(), env.payerTokens, intruder),
-      "0x1775", // KeyNotAllowed
-    );
-
-    assert.equal(
-      (await tokenBalance(env.context, env.vault)).toString(),
-      vaultBefore.toString(),
-    );
-  });
-
-  it("rejects a caller-created allowlist with real sysvar when signer is not in config", async () => {
-    // Demonstrates Criterion 2: caller creates their own allowlist containing their key,
-    // uses the real instructions sysvar with valid signature and message, but withdrawal
-    // is rejected because only config.oracles is authoritative.
-    const intruder = Keypair.generate();
-    env.context.setAccount(intruder.publicKey, {
-      lamports: 10_000_000_000,
-      data: Buffer.alloc(0),
-      owner: PublicKey.default,
-      executable: false,
-      rentEpoch: 0,
-    });
-
-    const callerAllowlist = Keypair.generate();
-    const allowlistIx = await env.program.methods
-      .createAllowlist([intruder.publicKey])
-      .accountsPartial({
-        authority: env.payer.publicKey,
-        allowlist: callerAllowlist.publicKey,
-      })
-      .instruction();
-    await sendIxs(env.context, [env.payer, callerAllowlist], allowlistIx);
-
+    const fakeAllowlist = Keypair.generate();
     const vaultBefore = await tokenBalance(env.context, env.vault);
     await catchError(
       withdraw(
@@ -205,7 +162,7 @@ describe("02-find-the-root-of-trust", () => {
         amount(),
         env.payerTokens,
         intruder,
-        callerAllowlist.publicKey,
+        fakeAllowlist.publicKey,
         SYSVAR_INSTRUCTIONS_PUBKEY,
       ),
       "0x1775", // KeyNotAllowed
@@ -214,7 +171,6 @@ describe("02-find-the-root-of-trust", () => {
     assert.equal(
       (await tokenBalance(env.context, env.vault)).toString(),
       vaultBefore.toString(),
-      "vault balance must not change",
     );
   });
 

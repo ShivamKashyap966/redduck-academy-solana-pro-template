@@ -65,7 +65,13 @@ to the cluster before anything else is trusted:
   belongs to this transaction, verified by the runtime's Ed25519 precompile.
 - **The Ed25519 key is compared with the config**: the parsed signing key
   must be in `config.oracles` (`KeyNotAllowed`), never in anything the caller
-  brought. Caller-created allowlists are never used to authorize withdrawals.
+  brought. The caller-created allowlist and `create_allowlist` instruction were
+  completely deleted; the program exposes only `initialize`, `deposit`, and
+  `withdraw`, all rooted in the `config` PDA.
+- **The Ed25519 parser validates the precompile program ID**: `parse_ed25519`
+  is included directly in `withdraw.rs` and requires `ix.program_id == ed25519_program::ID`,
+  header length >= 16 with single signature count = 1, offsets `0xffff`, and safe
+  buffer bounds before reading public key and message.
 - **The message is compared with the withdrawal**: `withdrawal_message` is
   built from `vault` (the `["vault"]` PDA with authority `config`), `recipient_tokens` (constrained
   to `config.mint`) and `amount` (the argument being executed), so a valid
@@ -96,5 +102,6 @@ the address comparison.
   PDA that `deposit` and `initialize` use.
 
 There is exactly one config, one place that writes it, and every instruction
-resolves it from the same seeds — caller-created allowlists (`create_allowlist` +
-`state/allowlist.rs`) can never authorize withdrawals.
+resolves it from the same seeds — the permissionless caller-created allowlist
+(`create_allowlist` + `state/allowlist.rs`) was deleted, and `deposit` establishes
+the same `config` PDA root of trust across every vault instruction.

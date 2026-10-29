@@ -27,7 +27,7 @@ export const withdraw = async (
   amount: BN,
   recipientTokens: PublicKey,
   signer: Keypair = env.oracle,
-  allowlist: PublicKey = env.allowlist,
+  allowlist?: PublicKey,
   instructions: PublicKey = SYSVAR_INSTRUCTIONS_PUBKEY,
   messageOverride?: Buffer,
 ) => {
