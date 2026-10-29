@@ -24,12 +24,16 @@ jobs:
           anchor --version
       - name: Install dependencies
         run: npm ci
-      - name: Build operator_free and run task 03 tests
+      - name: Build lazy_pool and run task 04 tests
         run: |
           mkdir -p "$HOME/.cache/solana"
-          anchor build -p operator_free -- -v
+          anchor build -p lazy_pool -- -v
           ls -la target/deploy
           ls -la target/idl
+          npx ts-mocha -p ./tsconfig.json -t 1000000 tests/04-rewards-without-a-loop/*.test.ts
+      - name: Build operator_free and run task 03 tests
+        run: |
+          anchor build -p operator_free -- -v
           npx ts-mocha -p ./tsconfig.json -t 1000000 tests/03-run-it-without-the-operator/*.test.ts
       - name: Build oracle_vault and run task 02 tests
         run: |
