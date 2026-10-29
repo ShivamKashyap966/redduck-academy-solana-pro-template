@@ -47,3 +47,31 @@ export const withdraw = async (
     .instruction();
   await sendIxs(env.context, [env.payer], signatureCheck, ix);
 };
+
+const u16 = (n: number) => {
+  const b = Buffer.alloc(2);
+  b.writeUInt16LE(n);
+  return b;
+};
+
+/** One instruction serialized in the layout `src/sysvar.rs` documents. */
+const serializeSysvarIx = (ix: {
+  programId: PublicKey;
+  data: Buffer;
+}): Buffer =>
+  Buffer.concat([
+    u16(0), // no accounts
+    ix.programId.toBuffer(),
+    u16(ix.data.length),
+    ix.data,
+  ]);
+
+/**
+ * A whole account payload with the instructions sysvar's layout holding one
+ * instruction — what an attacker writes into an account of their own so
+ * `load_instruction_unchecked` reads whatever they want.
+ */
+export const fakeInstructionsSysvar = (ix: {
+  programId: PublicKey;
+  data: Buffer;
+}): Buffer => Buffer.concat([u16(1), u16(4), serializeSysvarIx(ix)]);
