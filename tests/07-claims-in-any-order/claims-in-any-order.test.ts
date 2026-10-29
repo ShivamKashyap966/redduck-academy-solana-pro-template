@@ -1,10 +1,54 @@
 import { assert } from "chai";
-import { Keypair, SystemProgram, SYSVAR_INSTRUCTIONS_PUBKEY } from "@solana/web3.js";
+import { BN } from "@coral-xyz/anchor";
+import {
+  Ed25519Program,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+} from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 import { oneToken, sendIxs, tokenBalance } from "../helpers";
 import { ClaimsFixture, setupClaims } from "./fixture";
-import { claim, claimMessage } from "./actions";
+
+/**
+ * The message the oracle signs: device (32 bytes), total as u64 LE (8 bytes).
+ */
+export const claimMessage = (device: PublicKey, total: BN): Buffer =>
+  Buffer.concat([device.toBuffer(), total.toArrayLike(Buffer, "le", 8)]);
+
+/**
+ * Helper responsible for signing the message with the oracle's private key,
+ * constructing the native Ed25519Program signature verification instruction,
+ * building the program's claim instruction, and sending both together atomically.
+ */
+export const claim = async (
+  env: ClaimsFixture,
+  total: BN,
+  caller: Keypair = env.payer,
+  signer: Keypair = env.oracle,
+  instructions: PublicKey = SYSVAR_INSTRUCTIONS_PUBKEY,
+  customMessage?: Buffer,
+): Promise<void> => {
+  const message = customMessage ?? claimMessage(env.device, total);
+  const signatureCheck = Ed25519Program.createInstructionWithPrivateKey({
+    privateKey: signer.secretKey,
+    message,
+  });
+  const ix = await env.program.methods
+    .claim(total)
+    .accountsPartial({
+      caller: caller.publicKey,
+      device: env.device,
+      mint: env.mint,
+      ownerTokens: env.ownerTokens,
+      instructions,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .instruction();
+  await sendIxs(env.context, [caller], signatureCheck, ix);
+};
 
 const catchError = async (
   promise: Promise<unknown>,
