@@ -5,6 +5,15 @@ import { oneToken, toBN, tokenBalance } from "../helpers";
 import { MAX_PRICE_AGE, RewardsFixture, setupRewards } from "./fixture";
 import { accrue, buy, claim, setPrice } from "./actions";
 
+const ERROR_CODES: Record<string, string> = {
+  MathOverflow: "0x1770",
+  NothingToPay: "0x1771",
+  StalePrice: "0x1772",
+  NotEd25519: "0x1773",
+  MalformedEd25519: "0x1774",
+  UnauthorizedOracle: "0x1775",
+};
+
 const catchError = async (
   promise: Promise<unknown>,
   expectedError: string,
@@ -16,10 +25,13 @@ const catchError = async (
     err = e as Error;
   }
   assert.isNotNull(err, "Operation must fail");
-  assert.include(
-    err!.toString(),
-    expectedError,
-    `Operation must fail with ${expectedError}`,
+  const errStr = err!.toString();
+  const hex = ERROR_CODES[expectedError];
+  const matched =
+    errStr.includes(expectedError) || (hex !== undefined && errStr.includes(hex));
+  assert.isTrue(
+    matched,
+    `Operation must fail with ${expectedError} (${hex}). Got: ${errStr}`,
   );
 };
 
@@ -117,7 +129,12 @@ describe("03-run-it-without-the-operator", () => {
     const staleTime = clock.unixTimestamp - BigInt(MAX_PRICE_AGE + 10);
 
     await catchError(
-      setPrice(env, toBN(LAMPORTS_PER_SOL / 100), staleTime, env.stranger),
+      setPrice(
+        env,
+        toBN(LAMPORTS_PER_SOL / 100),
+        staleTime,
+        env.stranger,
+      ),
       "StalePrice",
     );
   });
