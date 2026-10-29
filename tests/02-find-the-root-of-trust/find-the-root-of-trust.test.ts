@@ -175,6 +175,49 @@ describe("02-find-the-root-of-trust", () => {
     );
   });
 
+  it("rejects a caller-created allowlist with real sysvar when signer is not in config", async () => {
+    // Demonstrates Criterion 2: caller creates their own allowlist containing their key,
+    // uses the real instructions sysvar with valid signature and message, but withdrawal
+    // is rejected because only config.oracles is authoritative.
+    const intruder = Keypair.generate();
+    env.context.setAccount(intruder.publicKey, {
+      lamports: 10_000_000_000,
+      data: Buffer.alloc(0),
+      owner: PublicKey.default,
+      executable: false,
+      rentEpoch: 0,
+    });
+
+    const callerAllowlist = Keypair.generate();
+    const allowlistIx = await env.program.methods
+      .createAllowlist([intruder.publicKey])
+      .accountsPartial({
+        authority: env.payer.publicKey,
+        allowlist: callerAllowlist.publicKey,
+      })
+      .instruction();
+    await sendIxs(env.context, [env.payer, callerAllowlist], allowlistIx);
+
+    const vaultBefore = await tokenBalance(env.context, env.vault);
+    await catchError(
+      withdraw(
+        env,
+        amount(),
+        env.payerTokens,
+        intruder,
+        callerAllowlist.publicKey,
+        SYSVAR_INSTRUCTIONS_PUBKEY,
+      ),
+      "0x1775", // KeyNotAllowed
+    );
+
+    assert.equal(
+      (await tokenBalance(env.context, env.vault)).toString(),
+      vaultBefore.toString(),
+      "vault balance must not change",
+    );
+  });
+
   it("rejects a message that does not match the withdrawal", async () => {
     // The oracle signs over 200 tokens while the instruction withdraws 100.
     const wrongMessage = withdrawalMessage(

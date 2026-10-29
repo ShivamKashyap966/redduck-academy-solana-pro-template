@@ -21,7 +21,7 @@ depends on, and whether the caller could have created that account:
    could create that account themselves, listing their own key.
 4. **The message matches the withdrawal** (compare against
    `withdrawal_message(vault, recipient_tokens, amount)`). Depends on the
-   `vault` (a PDA seeded `["config"]`, genuinely pinned), `recipient_tokens`
+   `vault` (a PDA seeded `["vault"]`, with `authority = config`), `recipient_tokens`
    and `amount`. This check is real — but the attacker simply signs the
    genuine message with their own key, so it passes for the wrong reason.
 5. **Transfer signed by the config PDA** (seeds `["config"]`). Correct: the
@@ -67,7 +67,7 @@ to the cluster before anything else is trusted:
   must be in `config.oracles` (`KeyNotAllowed`), never in anything the caller
   brought. Caller-created allowlists are never used to authorize withdrawals.
 - **The message is compared with the withdrawal**: `withdrawal_message` is
-  built from `vault` (the config-seeded PDA), `recipient_tokens` (constrained
+  built from `vault` (the `["vault"]` PDA with authority `config`), `recipient_tokens` (constrained
   to `config.mint`) and `amount` (the argument being executed), so a valid
   signature only ever covers this exact payout.
 
